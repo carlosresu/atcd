@@ -31,7 +31,7 @@ latest_idx <- which.max(dates)
 in_file   <- files[latest_idx]
 date_str  <- date_strs[latest_idx]
 
-cat("Using latest input file:", basename(in_file), "\n")
+# cat("Using latest input file:", basename(in_file), "\n")
 
 # Read data
 atc <- readr::read_csv(in_file, show_col_types = FALSE)
@@ -55,5 +55,5 @@ out_file <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
 # Write CSV with two columns
 readr::write_csv(atc_level5, out_file)
 
-cat("Export complete:", basename(out_file), "\n",
-    "Rows written:", nrow(atc_level5), "\n", sep = " ")
+# cat("Export complete:", basename(out_file), "\n",
+#     "Rows written:", nrow(atc_level5), "\n", sep = " ")
