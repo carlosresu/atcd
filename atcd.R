@@ -46,7 +46,7 @@ wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = 
     varname <- deparse(substitute(var))
 
   if (exists(varname, envir = parent.frame(n = 1))) {
-    message("Object '", varname, "' already exists.")
+    # message("Object '", varname, "' already exists.")
   } else {
     rds_file <- paste0(rds_dir, '/', varname, '.rds')
     if (file.exists(rds_file)) {
@@ -54,10 +54,10 @@ wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = 
       var_val <- readRDS(rds_file)
     } else {
       # Evaluate the expression in a temporary environment, akin to a function call.
-      message('Building ', varname, '.')
+      # message('Building ', varname, '.')
       var_val <- eval(substitute(exprs),
                       envir = new.env(parent = parent.frame(n = 1)))
-      message(varname, " completed. Saving to file '", rds_file, "'... ")
+      # message(varname, " completed. Saving to file '", rds_file, "'... ")
       if (!dir.exists(rds_dir))
         dir.create(rds_dir, recursive = TRUE)
       saveRDS(var_val, rds_file)
@@ -82,7 +82,7 @@ getRDS <- function(var, by_name = FALSE, pass_val = FALSE, assign_val = TRUE) {
     varname <- deparse(substitute(var))
 
   if (exists(varname, envir = parent.frame(n = 1))) {
-    message("Object '", varname, "' already exists.")
+    # message("Object '", varname, "' already exists.")
     var_val <- get(varname, envir = parent.frame(n = 1))
   } else {
     rds_file <- paste0(rds_dir, '/', varname, '.rds')
@@ -149,7 +149,7 @@ scrape_who_atc <- function(root_atc_code) {
     stop('scrape_who_atc() only accepts single objects, not vectors. Please provide a single valid ATC code as input.')
 
   web_address <- paste0('https://www.whocc.no/atc_ddd_index/?code=', root_atc_code, '&showdescription=no')
-  message('Scraping ', web_address, '.')
+  # message('Scraping ', web_address, '.')
   atc_code_length <- nchar(root_atc_code)
 
   # Hardened + memoised HTTP fetch (replaces read_html)
@@ -248,10 +248,10 @@ who_atc <- paste0('who_atc_', atc_roots) |>
 
 # Write them to a CSV file. Generate file name from current date in year-month-day format.
 out_file_name <- paste0(out_dir, '/WHO ATC-DDD ', format(Sys.Date(), "%Y-%m-%d"), '.csv')
-message('Writing results to ', out_file_name, '.')
+# message('Writing results to ', out_file_name, '.')
 if (file.exists(out_file_name))
-  message('Warning: file already exists. Will be overwritten.')
+  # message('Warning: file already exists. Will be overwritten.')
 readr::write_csv(who_atc, out_file_name)
 
 # Finish execution ------------------------------------------------------------------------------------------------
-message('Script execution completed.')
+# message('Script execution completed.')
