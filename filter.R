@@ -27,7 +27,7 @@ date_str <- date_strs[latest_idx]
 out_file_molecules <- file.path(output_dir, sprintf("who_atc_%s_molecules.csv", date_str))
 out_file_excluded  <- file.path(output_dir, sprintf("who_atc_%s_excluded.csv", date_str))
 
-cat("Using latest input file:", basename(in_file), "\n")
+# cat("Using latest input file:", basename(in_file), "\n")
 
 # Read file
 atc <- readr::read_csv(in_file, show_col_types = FALSE)
@@ -63,7 +63,7 @@ excluded <- classified %>%
 readr::write_csv(molecules, out_file_molecules)
 readr::write_csv(excluded, out_file_excluded)
 
-cat("Filtering complete.\n",
-    "Input rows:", nrow(atc), "\n",
-    "Molecules kept:", nrow(molecules), "->", basename(out_file_molecules), "\n",
-    "Excluded rows:", nrow(excluded), "->", basename(out_file_excluded), "\n")
+# cat("Filtering complete.\n",
+#     "Input rows:", nrow(atc), "\n",
+#     "Molecules kept:", nrow(molecules), "->", basename(out_file_molecules), "\n",
+#     "Excluded rows:", nrow(excluded), "->", basename(out_file_excluded), "\n")
