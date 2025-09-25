@@ -219,8 +219,10 @@ scrape_who_atc <- function(root_atc_code) {
 workers <- max(1, parallel::detectCores() - 1)
 future::plan(future::multisession, workers = workers)
 
-# Create/refresh per-root RDS files in parallel (no assignment needed in main session)
-furrr::future_map(
+# Create/refresh per-root RDS files in parallel.
+# Use future_walk since we only care about the side effect (writing RDS files)
+# and do not need to collect the results, which prevents printing them.
+furrr::future_walk(
   atc_roots,
   ~ wrapRDS(
       var        = paste0('who_atc_', .x),
