@@ -87,7 +87,7 @@ getRDS <- function(var, by_name = FALSE, pass_val = FALSE, assign_val = TRUE) {
   } else {
     rds_file <- paste0(rds_dir, '/', varname, '.rds')
     if (file.exists(rds_file)) {
-      message("Reading '", varname, "' from file '", rds_file, "'... ")
+      # message("Reading '", varname, "' from file '", rds_file, "'... ")
       var_val <- readRDS(rds_file)
     } else {
       stop(paste0('Unable to find file ', rds_file, '.'))
