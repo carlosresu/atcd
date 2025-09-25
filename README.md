@@ -46,7 +46,7 @@ Note that the WHO website is updated over time, so re-scraping ensures up-to-dat
 ## 🚀 What’s new in this fork (`carlosresu/atcd`)
 
 This repository is a fork of [fabkury/atcd](https://github.com/fabkury/atcd).  
-Enhancements have been made for **speed, reliability, and maintainability**:
+Enhancements have been made for **speed, reliability, maintainability, and downstream filtering**:
 
 ### ✨ Added
 
@@ -56,7 +56,11 @@ Enhancements have been made for **speed, reliability, and maintainability**:
   - Connection timeouts
   - 3 retries with exponential backoff (1s, 2s, 4s)
   - In-process **memoization** with `memoise` (no duplicate fetches within a run)
-- Explicit package loads (`purrr`, `future`, `furrr`, `memoise`, `httr2`, `tibble`).
+- **Export helper (`export.R`)**: automatically finds the newest scrape in `./output/` and produces a filtered file with only **Level-5 ATC codes** (`who_atc_<DATE>.csv`).
+- **Filtering helper (`filter_molecules.R`)**:
+  - Splits the latest Level-5 file into **molecules.csv** (true molecules, including molecule + “combinations” rows) and **excluded.csv** (placeholders like “various”, “combinations”, “other agents”, etc.).
+  - Comprehensive blacklist of generic descriptors built in (e.g. “various”, “miscellaneous”, “unspecified”, “agents”, “vitamins”, “vaccines”).
+  - Retains molecules even if their names contain “combinations” (e.g. “ibuprofen, combinations”).
 
 ### 🔄 Changed
 
@@ -81,7 +85,7 @@ Enhancements have been made for **speed, reliability, and maintainability**:
 
 ### 🧩 Compatibility
 
-- Output CSV format unchanged.
+- Output CSV schema unchanged for the main scrape.
 - RDS caching behavior unchanged (per-root RDS).
 - ATC root list identical to original.
 
@@ -96,17 +100,36 @@ Enhancements have been made for **speed, reliability, and maintainability**:
    cd atcd
    ```
 
-2. Open R and run:
+2. Run the scraper in R:
 
    ```r
    source("atcd.R")
    ```
 
-3. The script will:
+   This will:
 
    - Scrape all ATC roots (A, B, C, D, G, H, J, L, M, N, P, R, S, V)
    - Write cached `.rds` files in `output/rds/`
    - Write one combined CSV named like `WHO ATC-DDD 2025-09-25.csv` in `output/`
+
+3. Export only **Level-5 ATC codes**:
+
+   ```r
+   source("export.R")
+   ```
+
+   Produces `who_atc_<DATE>.csv` in `output/`.
+
+4. Split into **molecules vs. excluded**:
+
+   ```r
+   source("filter_molecules.R")
+   ```
+
+   Produces:
+
+   - `who_atc_<DATE>_molecules.csv`
+   - `who_atc_<DATE>_excluded.csv`
 
 ---
 
@@ -120,4 +143,4 @@ Enhancements have been made for **speed, reliability, and maintainability**:
 
 ## 🔍 Search keywords
 
-ATC download complete ATC with DDD ATC hierarchy ATC database all ATC classes with defined daily dose atc code list excel all atc codes csv download atc codes free download atc classification of drugs
+ATC download complete ATC with DDD ATC hierarchy ATC database all ATC classes with defined daily dose atc code list excel all atc codes csv download atc codes free download atc classification of drugs WHOCC scraping molecules only exclude combinations
