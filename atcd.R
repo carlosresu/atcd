@@ -50,7 +50,7 @@ wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = 
   } else {
     rds_file <- paste0(rds_dir, '/', varname, '.rds')
     if (file.exists(rds_file)) {
-      message("Reading '", varname, "' from file '", rds_file, "'... ")
+      # message("Reading '", varname, "' from file '", rds_file, "'... ")
       var_val <- readRDS(rds_file)
     } else {
       # Evaluate the expression in a temporary environment, akin to a function call.
