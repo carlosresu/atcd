@@ -1,146 +1,149 @@
 # atcd
 
-### Scrape Anatomical-Therapeutic-Chemical (ATC) classes from the WHO Collaborating Centre for Drug Statistics Methodology website
+### Scrape Anatomical–Therapeutic–Chemical (ATC) classes from the WHO Collaborating Centre for Drug Statistics Methodology
 
-###### codename: atcd
+**Codename:** `atcd`
 
-This script scrapes the World Health Organization's ATC website (https://www.whocc.no/atc_ddd_index/).  
-It reads ATC classes and their information, and writes them to one flat CSV file.
+This mini-toolset scrapes the WHO ATC website (https://www.whocc.no/atc_ddd_index/) and produces clean CSVs you can use in downstream pipelines. It:
 
-The code runs recursively down the hierarchy from an input ATC code. For example, if provided with `C10`, it will download `C10` and all subcodes under `C10`.
+- Crawls the ATC hierarchy **recursively** from each top-level root (A, B, C, …, V)
+- Extracts **all levels (1–5)**, including Level‑5 DDD/UoM/Adm.R when present
+- Exports a combined raw CSV snapshot (dated), plus a **Level‑5 only** CSV
+- Optionally splits Level‑5 into **molecules** vs **excluded placeholders**
 
-- **ATC levels 1–4:** the codes and names of all classes.
-- **ATC level 5:** some but not all classes also have Administration Route, Defined Daily Dose (DDD), and Note; these are scraped if present.
-
----
-
-## 📊 Scraping results (reference snapshot)
-
-As of **May 7th, 2020** there were **6,331** unique ATC codes and 5,517 unique names on the WHO website.
-
-| ATC level | Codes | Names |
-| :-------- | ----: | ----: |
-| Level 1   |    14 |    14 |
-| Level 2   |    94 |    94 |
-| Level 3   |   267 |   262 |
-| Level 4   |   889 |   819 |
-| Level 5   |  5067 |  4363 |
-
-Examples:
-
-- The substance **miconazole** appears under multiple codes:  
-  [A01AB09](https://www.whocc.no/atc_ddd_index/?code=A01AB09&showdescription=no),  
-  [A07AC01](https://www.whocc.no/atc_ddd_index/?code=A07AC01&showdescription=no),  
-  [D01AC02](https://www.whocc.no/atc_ddd_index/?code=D01AC02&showdescription=no),  
-  [G01AF04](https://www.whocc.no/atc_ddd_index/?code=G01AF04&showdescription=no),  
-  [J02AB01](https://www.whocc.no/atc_ddd_index/?code=J02AB01&showdescription=no),  
-  [S02AA13](https://www.whocc.no/atc_ddd_index/?code=S02AA13&showdescription=no).
-- The name with the most codes is **"combinations"** (39 codes).
-- The ATC codes with the most DDD–UoM–Adm. route combinations include [G03CA03](https://www.whocc.no/atc_ddd_index/?code=G03CA03&showdescription=no) (10).
-
-👉 **If you just need all ATC classes and data in one big table, download the CSV produced by this script.**  
-Note that the WHO website is updated over time, so re-scraping ensures up-to-date data.
+The scraper is **parallelized**, **memoized**, and uses a **hardened HTTP layer** with retries/timeouts.
 
 ---
 
-## 🚀 What’s new in this fork (`carlosresu/atcd`)
+## Quick start
 
-This repository is a fork of [fabkury/atcd](https://github.com/fabkury/atcd).  
-Enhancements have been made for **speed, reliability, maintainability, and downstream filtering**:
+```r
+# From the repository root (or this subfolder)
+# 1) Scrape the WHO ATC site (writes a dated raw CSV to ./output)
+source("atcd.R")
 
-### ✨ Added
+# 2) Export Level‑5 only to ./output/who_atc_<YYYY-MM-DD>.csv
+source("export.R")
 
-- **Parallel execution**: Scraping ATC roots in parallel with [`future`](https://cran.r-project.org/package=future) + [`furrr`](https://cran.r-project.org/package=furrr).
-- **Robust HTTP layer** via [`httr2`](https://cran.r-project.org/package=httr2):
-  - Custom User-Agent
-  - Connection timeouts
-  - 3 retries with exponential backoff (1s, 2s, 4s)
-  - In-process **memoization** with `memoise` (no duplicate fetches within a run)
-- **Export helper (`export.R`)**: automatically finds the newest scrape in `./output/` and produces a filtered file with only **Level-5 ATC codes** (`who_atc_<DATE>.csv`).
-- **Filtering helper (`filter_molecules.R`)**:
-  - Splits the latest Level-5 file into **molecules.csv** (true molecules, including molecule + “combinations” rows) and **excluded.csv** (placeholders like “various”, “combinations”, “other agents”, etc.).
-  - Comprehensive blacklist of generic descriptors built in (e.g. “various”, “miscellaneous”, “unspecified”, “agents”, “vitamins”, “vaccines”).
-  - Retains molecules even if their names contain “combinations” (e.g. “ibuprofen, combinations”).
+# 3) (Optional) Split molecules vs excluded placeholders
+source("filter.R")
+```
 
-### 🔄 Changed
+Outputs are written under `./output/`:
 
-- **`read_html()` → `fetch_html()`**: hardened, memoized fetcher with retry and timeout.
-- **Looping model**: sequential `for` loop replaced by parallel `future_map()` across ATC root letters.
-- **Assignment semantics**: inside parallel workers, RDS is written but in-process assignment is skipped (`assign_val = FALSE`).
-- **dplyr API modernized**: `mutate_all()` → `mutate(across(...))`.
-- **Type checks**: `class(sdt) == 'xml_missing'` → `inherits(sdt, "xml_missing")`.
-- **Explicit namespacing** of functions (`rvest::`, `dplyr::`, `readr::`, `tibble::`) for worker safety.
+- `WHO ATC-DDD <YYYY-MM-DD>.csv` – full crawl all levels (raw snapshot)
+- `who_atc_<YYYY-MM-DD>.csv` – **Level‑5 only**, columns: `atc_name, atc_code`
+- `who_atc_<YYYY-MM-DD>_molecules.csv` – Level‑5 molecules kept
+- `who_atc_<YYYY-MM-DD>_excluded.csv` – Level‑5 placeholders removed
 
-### ⚡ Performance
-
-- **Faster wall-clock time** on first scrape (multi-core parallel).
-- **Reduced redundant calls** with memoization.
-- **Resilient to slow servers**: automatic retries and timeouts.
-
-### 🔒 Reliability
-
-- Clearer progress feedback (`.progress = TRUE` with furrr).
-- Parallel plan resets back to sequential after scraping for safety.
-- If rate-limited by WHO, easy to throttle with a sleep or rate-limiter.
-
-### 🧩 Compatibility
-
-- Output CSV schema unchanged for the main scrape.
-- RDS caching behavior unchanged (per-root RDS).
-- ATC root list identical to original.
+> Dates are inferred from the run day; re-run to refresh.
 
 ---
 
-## 📥 Installation & Usage
+## How it works (high level)
 
-1. Clone this repo:
-
-   ```bash
-   git clone https://github.com/carlosresu/atcd
-   cd atcd
-   ```
-
-2. Run the scraper in R:
-
-   ```r
-   source("atcd.R")
-   ```
-
-   This will:
-
-   - Scrape all ATC roots (A, B, C, D, G, H, J, L, M, N, P, R, S, V)
-   - Write cached `.rds` files in `output/rds/`
-   - Write one combined CSV named like `WHO ATC-DDD 2025-09-25.csv` in `output/`
-
-3. Export only **Level-5 ATC codes**:
-
-   ```r
-   source("export.R")
-   ```
-
-   Produces `who_atc_<DATE>.csv` in `output/`.
-
-4. Split into **molecules vs. excluded**:
-
-   ```r
-   source("filter_molecules.R")
-   ```
-
-   Produces:
-
-   - `who_atc_<DATE>_molecules.csv`
-   - `who_atc_<DATE>_excluded.csv`
+```mermaid
+flowchart TD
+    A[Start] --> B[Scrape roots A,B,C,...,V]
+    B --> C{Level < 5?}
+    C -- yes --> D[Parse sublists → recurse]
+    C -- no (Level 5) --> E[Parse table\nATC/Name/DDD/UoM/Adm.R/Note]
+    D --> B
+    E --> F[Write per-root RDS]
+    F --> G[Bind all RDS → one tibble]
+    G --> H[Write raw CSV: WHO ATC-DDD <date>.csv]
+    H --> I[export.R]
+    I --> J[who_atc_<date>.csv (Level‑5 only)]
+    J --> K[filter_molecules.R]
+    K --> L[molecules.csv / excluded.csv]
+```
 
 ---
 
-## ⚖️ License & Copyright
+## Scripts & key behaviors
 
-- Original code and README by [Fabrício Kury](https://github.com/fabkury), released under **CC BY-NC-SA 4.0**.
-- This fork (`carlosresu/atcd`) maintains the same license.
-- The ATC-DDD data itself remains property of the [WHO Collaborating Centre for Drug Statistics Methodology](https://www.whocc.no). See their [copyright disclaimer](https://www.whocc.no/copyright_disclaimer/).
+### `atcd.R`
+
+- **Parallel scraping**: detects cores and uses `future::multisession` with `furrr::future_walk()` to process all ATC roots concurrently.
+- **Hardened fetch** (`fetch_html`):
+  - `httr2` request with custom User‑Agent and 30s timeout
+  - Up to **3 retries** with exponential backoff (1s, 2s, 4s)
+  - **In‑process memoization** via `memoise` to avoid duplicate fetches within a run
+- **Resilient parsing**:
+  - For Levels **1–4**, parses the subcode list and recurses
+  - For **Level 5**, parses the details table into columns:
+    `atc_code, atc_name, ddd, uom, adm_r, note`
+  - Fills blank `atc_code/atc_name` on multi‑row DDD entries
+- **Caching** with `wrapRDS()/getRDS()`
+  - Each root (e.g., `who_atc_A`) is cached under `./output/rds/`
+  - Final combined tibble is written as `WHO ATC-DDD <YYYY-MM-DD>.csv` in `./output/`
+
+**Packages used**: `rvest`, `xml2`, `httr2`, `memoise`, `dplyr`, `readr`, `tibble`, `purrr`, `future`, `furrr`.
+
+### `export.R`
+
+- Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.csv` by filename date
+- Keeps **Level‑5** only (7‑char ATC codes)
+- Exports **two columns** in sorted order: `atc_name, atc_code`
+- Writes `./output/who_atc_<YYYY-MM-DD>.csv`
+
+### `filter.R`
+
+- Takes the latest `who_atc_<YYYY-MM-DD>.csv`
+- Keeps Level‑5 rows (7‑char codes)
+- Tags **pure placeholders** (e.g., `various`, `miscellaneous`, `unspecified`, `general`, `other/others`, `combination(s)`, `agents`, `products`)
+- Writes two files:
+  - `who_atc_<date>_molecules.csv` – molecules retained (even if name contains “combinations”)
+  - `who_atc_<date>_excluded.csv` – placeholders only
 
 ---
 
-## 🔍 Search keywords
+## File schema
 
-ATC download complete ATC with DDD ATC hierarchy ATC database all ATC classes with defined daily dose atc code list excel all atc codes csv download atc codes free download atc classification of drugs WHOCC scraping molecules only exclude combinations
+### Raw snapshot (`WHO ATC-DDD <YYYY-MM-DD>.csv`)
+
+Columns may include:
+
+- `atc_code` (chr) – ATC code (Level 1–5)
+- `atc_name` (chr) – class or substance name
+- `ddd` (dbl/chr, optional) – Defined Daily Dose (Level‑5 only; may be missing)
+- `uom` (chr, optional) – unit of measure (Level‑5 only)
+- `adm_r` (chr, optional) – route of administration (Level‑5 only)
+- `note` (chr, optional) – additional notes
+
+### Level‑5 export (`who_atc_<date>.csv`)
+
+- `atc_name`, `atc_code` (7‑char codes only)
+
+---
+
+## Requirements
+
+R ≥ 4.1 and the following packages:
+
+```r
+pacman::p_load(rvest, dplyr, readr, xml2, purrr, future, furrr, memoise, httr2, tibble, stringr)
+```
+
+If `pacman` isn’t installed:
+
+```r
+install.packages("pacman")
+```
+
+---
+
+## Troubleshooting
+
+- **Empty outputs**: WHO site may change layout or be rate‑limited. Re‑run later or reduce workers.
+- **SSL / network errors**: Check connectivity; the fetcher retries (1s, 2s, 4s) before failing.
+- **Stale data**: Delete `./output/rds/` to force a fresh scrape of a root.
+- **Locale issues**: Ensure UTF‑8 encoding in your R session.
+
+---
+
+## Notes & licensing
+
+- Data is scraped from the **WHO Collaborating Centre for Drug Statistics Methodology** and is subject to their terms. See their official site for the latest copyright/disclaimer.
+- Original concept by [Fabrício Kury](https://github.com/fabkury) under **CC BY‑NC‑SA 4.0**; this fork retains the same license.
+- This tool is for research and public‑interest use; please respect WHO server load—avoid excessive re‑scraping.
