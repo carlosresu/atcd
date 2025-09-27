@@ -1,9 +1,9 @@
 # export.R
 # ---------------------------------------------
 # Find the latest "WHO ATC-DDD YYYY-MM-DD.csv" inside ./output,
-# keep ONLY Level 5 ATC codes (7-char codes), and export two columns:
-#   atc_name, atc_code
-# Output file: ./output/who_atc_<YYYY-MM-DD>.csv
+# keep ONLY Level 5 ATC codes (7-char codes) with ALL original columns,
+# and export them.
+# Output file: ./output/who_atc_level5_<YYYY-MM-DD>.csv
 # ---------------------------------------------
 
 pacman::p_load(readr, dplyr)
@@ -28,8 +28,8 @@ dates <- as.Date(date_strs, format = "%Y-%m-%d")
 
 # Pick the newest by the date embedded in the filename
 latest_idx <- which.max(dates)
-in_file   <- files[latest_idx]
-date_str  <- date_strs[latest_idx]
+in_file <- files[latest_idx]
+date_str <- date_strs[latest_idx]
 
 # cat("Using latest input file:", basename(in_file), "\n")
 
@@ -43,16 +43,15 @@ if (length(missing) > 0) {
   stop("Input file is missing required columns: ", paste(missing, collapse = ", "))
 }
 
-# Keep only Level 5 (7-char) ATC codes and just the required columns
+# Keep only Level 5 (7-char) ATC codes, retaining all original columns
 atc_level5 <- atc %>%
   filter(nchar(atc_code) == 7) %>%
-  distinct(atc_name, atc_code) %>%
   arrange(atc_code)
 
-# Output path carries the same date
-out_file <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
+# Output path carries the same date, updated filename for clarity
+out_file <- file.path(output_dir, sprintf("who_atc_level5_%s.csv", date_str))
 
-# Write CSV with two columns
+# Write CSV with all columns for the filtered data
 readr::write_csv(atc_level5, out_file)
 
 # cat("Export complete:", basename(out_file), "\n",
