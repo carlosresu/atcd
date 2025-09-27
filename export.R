@@ -8,7 +8,28 @@
 
 pacman::p_load(readr, dplyr)
 
-output_dir <- "output"
+get_script_dir <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("--file=", args)
+  if (length(file_arg) > 0) {
+    script_path <- sub("--file=", "", args[file_arg[1]])
+    return(dirname(normalizePath(script_path, mustWork = FALSE)))
+  }
+  frame_files <- unlist(lapply(sys.frames(), function(env) {
+    if (!is.null(env$ofile)) env$ofile else NULL
+  }))
+  if (length(frame_files) > 0) {
+    return(dirname(normalizePath(frame_files[length(frame_files)], mustWork = FALSE)))
+  }
+  normalizePath(getwd(), mustWork = FALSE)
+}
+
+script_dir <- get_script_dir()
+output_dir <- file.path(script_dir, "output")
+
+if (!dir.exists(output_dir)) {
+  stop(sprintf("Output directory not found: %s", output_dir))
+}
 
 # List candidate files
 files <- list.files(
