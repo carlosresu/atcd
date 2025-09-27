@@ -297,8 +297,8 @@ out_file_name <- file.path(out_dir, paste0("WHO ATC-DDD ", format(Sys.Date(), "%
 # message('Writing results to ', out_file_name, '.')
 if (file.exists(out_file_name)) {
   # message('Warning: file already exists. Will be overwritten.')
-  readr::write_csv(who_atc, out_file_name)
 }
+readr::write_csv(who_atc, out_file_name)
 
 # Finish execution ------------------------------------------------------------------------------------------------
 # message('Script execution completed.')

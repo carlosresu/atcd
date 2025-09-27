@@ -22,21 +22,26 @@ The scraper is **parallelized**, **memoized**, and uses a **hardened HTTP layer*
 # 1) Scrape the WHO ATC site (writes a dated raw CSV to ./output)
 source("atcd.R")
 
-# 2) Export Level‑5 only to ./output/who_atc_<YYYY-MM-DD>.csv
+# 2) Export Level‑5 only (writes ./output/who_atc_<YYYY-MM-DD>.csv and a legacy who_atc_level5_<...>.csv)
 source("export.R")
 
-# 3) (Optional) Split molecules vs excluded placeholders
+# 3) (Optional) Split molecules vs excluded placeholders (writes canonical + legacy filenames)
 source("filter.R")
 ```
 
 Outputs are written under `./output/`:
 
 - `WHO ATC-DDD <YYYY-MM-DD>.csv` – full crawl all levels (raw snapshot)
-- `who_atc_<YYYY-MM-DD>.csv` – **Level‑5 only**, columns: `atc_name, atc_code`
-- `who_atc_<YYYY-MM-DD>_molecules.csv` – Level‑5 molecules kept
+- `who_atc_<YYYY-MM-DD>.csv` – **Level‑5 only**, retains all original columns (DDD, UoM, Adm.R, Note)
+- `who_atc_<YYYY-MM-DD>_molecules.csv` – Level‑5 molecules kept (same columns as input)
 - `who_atc_<YYYY-MM-DD>_excluded.csv` – Level‑5 placeholders removed
+- Legacy duplicates `who_atc_level5_<...>.csv` / `_molecules.csv` / `_excluded.csv` are emitted for backward compatibility
+
+> The downstream Python pipeline expects the canonical `who_atc_<date>_molecules.csv` filename when loading WHO references.
 
 > Dates are inferred from the run day; re-run to refresh.
+
+All three scripts detect their own directory, so invoking them via `Rscript dependencies/atcd/<script>.R` from anywhere in the repo (or from cron) works without additional `setwd()` calls.
 
 ---
 
@@ -83,18 +88,18 @@ flowchart TD
 ### `export.R`
 
 - Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.csv` by filename date
-- Keeps **Level‑5** only (7‑char ATC codes)
-- Exports **two columns** in sorted order: `atc_name, atc_code`
-- Writes `./output/who_atc_<YYYY-MM-DD>.csv`
+- Keeps **Level‑5** only (7‑char ATC codes), preserving **all columns** (DDD/UoM/Adm.R/Note)
+- Writes the canonical `./output/who_atc_<YYYY-MM-DD>.csv`
+- Drops an identically structured legacy copy `who_atc_level5_<YYYY-MM-DD>.csv` for older tooling
 
 ### `filter.R`
 
-- Takes the latest `who_atc_<YYYY-MM-DD>.csv`
-- Keeps Level‑5 rows (7‑char codes)
-- Tags **pure placeholders** (e.g., `various`, `miscellaneous`, `unspecified`, `general`, `other/others`, `combination(s)`, `agents`, `products`)
-- Writes two files:
-  - `who_atc_<date>_molecules.csv` – molecules retained (even if name contains “combinations”)
-  - `who_atc_<date>_excluded.csv` – placeholders only
+- Takes the latest canonical `who_atc_<YYYY-MM-DD>.csv` (falls back to the legacy filename if needed)
+- Detects **pure placeholders** where every lowercase token is in the set `{various, miscellaneous, unspecified, general, other, others, combination(s), agents, products}`
+- Retains all original columns and writes:
+  - `who_atc_<date>_molecules.csv` – molecules retained (placeholder tokens allowed when mixed with real words)
+  - `who_atc_<date>_excluded.csv` – pure placeholders only
+- Emits matching `who_atc_level5_<date>_molecules/excluded.csv` files so older jobs keep working
 
 ---
 
@@ -113,7 +118,7 @@ Columns may include:
 
 ### Level‑5 export (`who_atc_<date>.csv`)
 
-- `atc_name`, `atc_code` (7‑char codes only)
+- All columns from the raw snapshot restricted to 7‑character codes and sorted alphabetically by `atc_code`
 
 ---
 
