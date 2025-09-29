@@ -85,6 +85,7 @@ placeholder_tokens <- c(
 )
 
 # Classify rows, adding temporary columns for filtering
+## Flag rows that are placeholders versus true molecule entries.
 classified <- atc %>%
   mutate(
     name_trim = str_squish(str_to_lower(atc_name)),

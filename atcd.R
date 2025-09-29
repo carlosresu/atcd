@@ -98,6 +98,7 @@ wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = 
       if (!dir.exists(rds_dir)) {
         dir.create(rds_dir, recursive = TRUE)
       }
+      # Cache the newly computed object for future runs.
       saveRDS(var_val, rds_file)
     }
     if (assign_val) {
@@ -242,21 +243,22 @@ scrape_who_atc <- function(root_atc_code) {
         return(NULL)
       }
 
-      retval <- sdt |>
-        rvest::html_table(header = TRUE) |>
-        dplyr::rename(atc_code = `ATC code`, atc_name = Name, ddd = DDD, uom = U, adm_r = `Adm.R`, note = Note) |>
-        dplyr::mutate(dplyr::across(dplyr::everything(), ~ ifelse(. == "", NA, .)))
+  retval <- sdt |>
+    rvest::html_table(header = TRUE) |>
+    dplyr::rename(atc_code = `ATC code`, atc_name = Name, ddd = DDD, uom = U, adm_r = `Adm.R`, note = Note) |>
+    dplyr::mutate(dplyr::across(dplyr::everything(), ~ ifelse(. == "", NA, .)))
 
-      # The table on the website does not repeat atc_code and atc_name in subsequent rows when that ATC code has more
-      # than one ddd/uom/adm_r. Let's fill-in the blanks when that is the case.
-      if (nrow(retval) > 1) {
-        for (i in 2:nrow(retval)) {
-          if (is.na(retval$atc_code[i])) {
-            retval$atc_code[i] <- retval$atc_code[i - 1]
-            retval$atc_name[i] <- retval$atc_name[i - 1]
-          }
-        }
+  # The table on the website does not repeat atc_code and atc_name in subsequent rows when that ATC code has more
+  # than one ddd/uom/adm_r. Let's fill-in the blanks when that is the case.
+  if (nrow(retval) > 1) {
+    for (i in 2:nrow(retval)) {
+      if (is.na(retval$atc_code[i])) {
+        # Inherit the previous non-missing code/name so each row is fully populated.
+        retval$atc_code[i] <- retval$atc_code[i - 1]
+        retval$atc_name[i] <- retval$atc_name[i - 1]
       }
+    }
+  }
 
       return(retval)
     }

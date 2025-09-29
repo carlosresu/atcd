@@ -69,6 +69,7 @@ if (length(missing) > 0) {
 }
 
 # Keep only Level 5 (7-char) ATC codes, retaining all original columns
+## Filter to leaf-level ATC entries because earlier stages rely on molecules only.
 atc_level5 <- atc %>%
   filter(nchar(atc_code) == 7) %>%
   arrange(atc_code)
