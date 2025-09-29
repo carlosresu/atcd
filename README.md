@@ -67,7 +67,7 @@ flowchart TD
 
 ## Scripts & key behaviors
 
-### `atcd.R`
+### [atcd.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/atcd.R)
 
 - **Parallel scraping**: detects cores and uses `future::multisession` with `furrr::future_walk()` to process all ATC roots concurrently.
 - **Hardened fetch** (`fetch_html`):
@@ -85,14 +85,14 @@ flowchart TD
 
 **Packages used**: `rvest`, `xml2`, `httr2`, `memoise`, `dplyr`, `readr`, `tibble`, `purrr`, `future`, `furrr`.
 
-### `export.R`
+### [export.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/export.R)
 
 - Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.csv` by filename date
 - Keeps **Level‑5** only (7‑char ATC codes), preserving **all columns** (DDD/UoM/Adm.R/Note)
 - Writes the canonical `./output/who_atc_<YYYY-MM-DD>.csv`
 - Drops an identically structured legacy copy `who_atc_level5_<YYYY-MM-DD>.csv` for older tooling
 
-### `filter.R`
+### [filter.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/filter.R)
 
 - Takes the latest canonical `who_atc_<YYYY-MM-DD>.csv` (falls back to the legacy filename if needed)
 - Detects **pure placeholders** where every lowercase token is in the set `{various, miscellaneous, unspecified, general, other, others, combination(s), agents, products}`
