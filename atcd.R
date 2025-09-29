@@ -154,6 +154,7 @@ fetch_html <- local({
       httr2::req_user_agent(agent) |>
       httr2::req_timeout(30)
     # Try up to 3 times with exponential backoff on failure
+    # Mirrors README summary: hardened layer with retries/timeouts + memoization.
     for (i in 0:2) {
       resp <- try(httr2::req_perform(req), silent = TRUE)
       if (!inherits(resp, "try-error")) {

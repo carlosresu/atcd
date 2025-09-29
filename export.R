@@ -76,6 +76,7 @@ atc_level5 <- atc %>%
 
 # Canonical output used by the downstream Python pipeline
 out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
+# Matches dependencies/atcd/README.md note that Python loaders expect this filename pattern.
 readr::write_csv(atc_level5, out_file_canonical)
 
 # Legacy filename retained for backwards compatibility with older workflows
