@@ -44,6 +44,10 @@ get_script_dir <- function() {
 
 this_dir <- get_script_dir()
 
+#' Ensure a directory exists relative to the script, creating parents as needed.
+#'
+#' @param ... Path components passed to file.path.
+#' @return Normalized absolute directory path.
 ensure_directory <- function(...) {
   # Uses file.path() and normalizePath() for robust, OS-agnostic path creation.
   dir_path <- normalizePath(do.call(file.path, list(...)), mustWork = FALSE)
@@ -182,6 +186,10 @@ fetch_html <- local({
 atc_roots <- c("A", "B", "C", "D", "G", "H", "J", "L", "M", "N", "P", "R", "S", "V")
 
 # Scrape data -----------------------------------------------------------------------------------------------------
+#' Scrape WHO ATC data for a root code and all descendants.
+#'
+#' @param root_atc_code One- to five-character ATC code indicating the subtree to scrape.
+#' @return Tibble containing ATC codes, names, DDDs, and related metadata.
 scrape_who_atc <- function(root_atc_code) {
   # This function scrapes and returns a tibble with all data available from https://www.whocc.no/atc_ddd_index/ for the
   # given ATC code and all its subcodes.

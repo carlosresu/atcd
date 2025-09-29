@@ -8,6 +8,9 @@
 
 pacman::p_load(readr, dplyr, stringr, purrr)
 
+#' Return the directory where the script lives.
+#'
+#' @return Normalized path to the script directory, even when sourced via Rscript.
 get_script_dir <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("--file=", args)

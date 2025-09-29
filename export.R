@@ -9,6 +9,9 @@
 
 pacman::p_load(readr, dplyr)
 
+#' Return the directory where the script resides, regardless of invocation context.
+#'
+#' @return Normalized path pointing to the script's directory.
 get_script_dir <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("--file=", args)
