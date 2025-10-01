@@ -1,6 +1,6 @@
 # filter.R
 # --------------------------------------------------------
-# Splits the latest who_atc_level5_YYYY-MM-DD.csv into:
+# Splits the latest who_atc_YYYY-MM-DD.csv into:
 #   molecules.csv (real substances, even if "... combinations")
 #   excluded.csv  (generic placeholders only)
 # This version keeps ALL original columns in the output files.
@@ -34,31 +34,18 @@ if (!dir.exists(output_dir)) {
   stop(sprintf("Output directory not found: %s", output_dir))
 }
 
-# Find the latest canonical who_atc_<YYYY-MM-DD>.csv; fall back to legacy naming if needed
-files_canonical <- list.files(
+# Find the latest canonical who_atc_<YYYY-MM-DD>.csv
+files <- list.files(
   path = output_dir,
   pattern = "^who_atc_\\d{4}-\\d{2}-\\d{2}\\.csv$",
   full.names = TRUE
 )
 
-files_legacy <- list.files(
-  path = output_dir,
-  pattern = "^who_atc_level5_\\d{4}-\\d{2}-\\d{2}\\.csv$",
-  full.names = TRUE
-)
-
-files <- files_canonical
-name_prefix <- "who_atc"
-if (length(files) == 0) {
-  files <- files_legacy
-  name_prefix <- "who_atc_level5"
-}
-
 if (length(files) == 0) {
   stop("No who_atc CSV exports found in ./output. Run export.R first.")
 }
 
-date_pattern <- sprintf("^%s_(\\d{4}-\\d{2}-\\d{2})\\.csv$", name_prefix)
+date_pattern <- "^who_atc_(\\d{4}-\\d{2}-\\d{2})\\.csv$"
 date_strs <- sub(date_pattern, "\\1", basename(files))
 dates <- as.Date(date_strs, "%Y-%m-%d")
 latest_idx <- which.max(dates)
@@ -68,9 +55,6 @@ date_str <- date_strs[latest_idx]
 
 out_file_molecules_canonical <- file.path(output_dir, sprintf("who_atc_%s_molecules.csv", date_str))
 out_file_excluded_canonical <- file.path(output_dir, sprintf("who_atc_%s_excluded.csv", date_str))
-
-out_file_molecules_legacy <- file.path(output_dir, sprintf("who_atc_level5_%s_molecules.csv", date_str))
-out_file_excluded_legacy <- file.path(output_dir, sprintf("who_atc_level5_%s_excluded.csv", date_str))
 
 # cat("Using latest input file:", basename(in_file), "\n")
 
@@ -111,11 +95,6 @@ excluded <- classified %>%
 # Write outputs
 readr::write_csv(molecules, out_file_molecules_canonical)
 readr::write_csv(excluded, out_file_excluded_canonical)
-
-if (!identical(out_file_molecules_canonical, out_file_molecules_legacy)) {
-  readr::write_csv(molecules, out_file_molecules_legacy)
-  readr::write_csv(excluded, out_file_excluded_legacy)
-}
 
 # cat("Filtering complete.\n",
 #     "Input rows:", nrow(atc), "\n",

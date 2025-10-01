@@ -2,9 +2,7 @@
 # ---------------------------------------------
 # Find the latest "WHO ATC-DDD YYYY-MM-DD.csv" inside ./output,
 # keep ONLY Level 5 ATC codes (7-char codes) with ALL original columns,
-# and export them.
-# Canonical output: ./output/who_atc_<YYYY-MM-DD>.csv
-# Legacy compatibility copy: ./output/who_atc_level5_<YYYY-MM-DD>.csv
+# and export them as ./output/who_atc_<YYYY-MM-DD>.csv
 # ---------------------------------------------
 
 pacman::p_load(readr, dplyr)
@@ -74,16 +72,9 @@ atc_level5 <- atc %>%
   filter(nchar(atc_code) == 7) %>%
   arrange(atc_code)
 
-# Canonical output used by the downstream Python pipeline
 out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
 # Matches dependencies/atcd/README.md note that Python loaders expect this filename pattern.
 readr::write_csv(atc_level5, out_file_canonical)
-
-# Legacy filename retained for backwards compatibility with older workflows
-out_file_legacy <- file.path(output_dir, sprintf("who_atc_level5_%s.csv", date_str))
-if (!identical(out_file_legacy, out_file_canonical)) {
-  readr::write_csv(atc_level5, out_file_legacy)
-}
 
 # cat("Export complete:", basename(out_file_canonical), "\n",
 #     "Rows written:", nrow(atc_level5), "\n", sep = " ")

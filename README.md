@@ -22,10 +22,10 @@ The scraper is **parallelized**, **memoized**, and uses a **hardened HTTP layer*
 # 1) Scrape the WHO ATC site (writes a dated raw CSV to ./output)
 source("atcd.R")
 
-# 2) Export Level‑5 only (writes ./output/who_atc_<YYYY-MM-DD>.csv and a legacy who_atc_level5_<...>.csv)
+# 2) Export Level‑5 only (writes ./output/who_atc_<YYYY-MM-DD>.csv)
 source("export.R")
 
-# 3) (Optional) Split molecules vs excluded placeholders (writes canonical + legacy filenames)
+# 3) (Optional) Split molecules vs excluded placeholders (writes canonical filenames)
 source("filter.R")
 ```
 
@@ -35,7 +35,6 @@ Outputs are written under `./output/`:
 - `who_atc_<YYYY-MM-DD>.csv` – **Level‑5 only**, retains all original columns (DDD, UoM, Adm.R, Note)
 - `who_atc_<YYYY-MM-DD>_molecules.csv` – Level‑5 molecules kept (same columns as input)
 - `who_atc_<YYYY-MM-DD>_excluded.csv` – Level‑5 placeholders removed
-- Legacy duplicates `who_atc_level5_<...>.csv` / `_molecules.csv` / `_excluded.csv` are emitted for backward compatibility
 
 > The downstream Python pipeline expects the canonical `who_atc_<date>_molecules.csv` filename when loading WHO references.
 
@@ -90,16 +89,14 @@ flowchart TD
 - Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.csv` by filename date
 - Keeps **Level‑5** only (7‑char ATC codes), preserving **all columns** (DDD/UoM/Adm.R/Note)
 - Writes the canonical `./output/who_atc_<YYYY-MM-DD>.csv`
-- Drops an identically structured legacy copy `who_atc_level5_<YYYY-MM-DD>.csv` for older tooling
 
 ### [filter.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/filter.R)
 
-- Takes the latest canonical `who_atc_<YYYY-MM-DD>.csv` (falls back to the legacy filename if needed)
+- Takes the latest canonical `who_atc_<YYYY-MM-DD>.csv`
 - Detects **pure placeholders** where every lowercase token is in the set `{various, miscellaneous, unspecified, general, other, others, combination(s), agents, products}`
 - Retains all original columns and writes:
   - `who_atc_<date>_molecules.csv` – molecules retained (placeholder tokens allowed when mixed with real words)
   - `who_atc_<date>_excluded.csv` – pure placeholders only
-- Emits matching `who_atc_level5_<date>_molecules/excluded.csv` files so older jobs keep working
 
 ---
 
