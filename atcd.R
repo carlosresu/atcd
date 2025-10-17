@@ -61,6 +61,52 @@ ensure_directory <- function(...) {
 out_dir <- ensure_directory(this_dir, "output")
 rds_dir <- ensure_directory(out_dir, "rds")
 
+# --- Additional output mirroring helpers -------------------------------------
+paths_equal <- function(path_a, path_b) {
+  if (is.null(path_a) || is.null(path_b)) {
+    return(FALSE)
+  }
+  a_norm <- tryCatch(
+    normalizePath(path_a, winslash = "/", mustWork = FALSE),
+    error = function(...) NA_character_
+  )
+  b_norm <- tryCatch(
+    normalizePath(path_b, winslash = "/", mustWork = FALSE),
+    error = function(...) NA_character_
+  )
+  !is.na(a_norm) && !is.na(b_norm) && identical(a_norm, b_norm)
+}
+
+safe_copy <- function(src, dest) {
+  tryCatch({
+    if (!file.exists(src) || paths_equal(src, dest)) {
+      return(FALSE)
+    }
+    dest_dir <- dirname(dest)
+    if (!dir.exists(dest_dir)) {
+      dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+    if (!dir.exists(dest_dir)) {
+      return(FALSE)
+    }
+    file.copy(src, dest, overwrite = TRUE, copy.mode = TRUE)
+  }, error = function(...) FALSE)
+}
+
+copy_outputs_to_superproject <- function(src_file) {
+  repo_root <- normalizePath(file.path(this_dir, "..", ".."), winslash = "/", mustWork = FALSE)
+  dependencies_dir <- file.path(repo_root, "dependencies")
+  if (!dir.exists(dependencies_dir)) {
+    return(invisible(FALSE))
+  }
+
+  super_output_dir <- file.path(repo_root, "dependencies", "atcd", "output")
+  safe_copy(src_file, file.path(super_output_dir, basename(src_file)))
+
+  inputs_dir <- file.path(repo_root, "inputs")
+  safe_copy(src_file, file.path(inputs_dir, basename(src_file)))
+}
+
 # --- MODIFICATION END ---
 
 options(expressions = 100000) # Allow deep recursion.
@@ -310,6 +356,7 @@ if (file.exists(out_file_name)) {
   # message('Warning: file already exists. Will be overwritten.')
 }
 readr::write_csv(who_atc, out_file_name)
+copy_outputs_to_superproject(out_file_name)
 
 # Finish execution ------------------------------------------------------------------------------------------------
 # message('Script execution completed.')
