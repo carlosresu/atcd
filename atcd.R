@@ -109,6 +109,36 @@ copy_outputs_to_superproject <- function(src_file) {
 
 # --- MODIFICATION END ---
 
+.resolve_worker_count <- function() {
+  env_workers <- Sys.getenv("ESOA_ATCD_WORKERS", unset = NA_character_)
+  if (!is.na(env_workers)) {
+    parsed <- suppressWarnings(as.integer(env_workers))
+    if (!is.na(parsed) && parsed > 0) {
+      return(parsed)
+    }
+  }
+  cores <- tryCatch(parallel::detectCores(), error = function(...) NA_integer_)
+  if (is.na(cores) || cores <= 1) {
+    return(1L)
+  }
+  max(1L, cores - 1L)
+}
+
+.configure_future_plan <- function(workers = NULL) {
+  if (is.null(workers) || !is.numeric(workers) || workers < 1) {
+    workers <- .resolve_worker_count()
+  }
+  workers <- max(1L, as.integer(workers))
+  if (.Platform$OS.type == "windows") {
+    future::plan(future::multisession, workers = workers)
+  } else if (future::supportsMulticore()) {
+    future::plan(future::multicore, workers = workers)
+  } else {
+    future::plan(future::multisession, workers = workers)
+  }
+  workers
+}
+
 options(expressions = 100000) # Allow deep recursion.
 
 wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = TRUE) {
@@ -318,8 +348,8 @@ scrape_who_atc <- function(root_atc_code) {
 }
 
 # Build each root tree in parallel (safe on Windows/macOS/Linux) ---------------------------------------------------
-workers <- max(1, parallel::detectCores() - 1)
-future::plan(future::multisession, workers = workers)
+workers <- .configure_future_plan()
+on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
 
 # Create/refresh per-root RDS files in parallel.
 # Use future_walk since we only care about the side effect (writing RDS files)
@@ -340,7 +370,7 @@ furrr::future_walk(
 )
 
 # Optional: return to sequential plan
-future::plan(future::sequential)
+try(future::plan(future::sequential), silent = TRUE)
 
 # Write results to storage ----------------------------------------------------------------------------------------
 # Read the files produced by scrape_who_atc().

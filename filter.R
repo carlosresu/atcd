@@ -6,7 +6,7 @@
 # This version keeps ALL original columns in the output files.
 # --------------------------------------------------------
 
-pacman::p_load(readr, dplyr, stringr, purrr)
+pacman::p_load(readr, dplyr, stringr, purrr, future, furrr)
 
 #' Return the directory where the script lives.
 #'
@@ -80,6 +80,39 @@ copy_outputs_to_superproject <- function(src_file) {
   safe_copy(src_file, file.path(inputs_dir, basename(src_file)))
 }
 
+.resolve_worker_count <- function() {
+  env_workers <- Sys.getenv("ESOA_ATCD_FILTER_WORKERS", unset = NA_character_)
+  if (!is.na(env_workers)) {
+    parsed <- suppressWarnings(as.integer(env_workers))
+    if (!is.na(parsed) && parsed > 0) {
+      return(parsed)
+    }
+  }
+  cores <- tryCatch(future::availableCores(), error = function(...) NA_integer_)
+  if (is.na(cores) || cores < 1) {
+    cores <- tryCatch(parallel::detectCores(), error = function(...) NA_integer_)
+  }
+  if (is.na(cores) || cores <= 1) {
+    return(1L)
+  }
+  max(1L, cores - 1L)
+}
+
+.configure_future_plan <- function(workers = NULL) {
+  if (is.null(workers) || !is.numeric(workers) || workers < 1) {
+    workers <- .resolve_worker_count()
+  }
+  workers <- max(1L, as.integer(workers))
+  if (.Platform$OS.type == "windows") {
+    future::plan(future::multisession, workers = workers)
+  } else if (future::supportsMulticore()) {
+    future::plan(future::multicore, workers = workers)
+  } else {
+    future::plan(future::multisession, workers = workers)
+  }
+  workers
+}
+
 # Find the latest canonical who_atc_<YYYY-MM-DD>.csv
 files <- list.files(
   path = output_dir,
@@ -114,17 +147,21 @@ placeholder_tokens <- c(
   "agents", "products"
 )
 
+workers <- .configure_future_plan()
+on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
+
 # Classify rows, adding temporary columns for filtering
 ## Flag rows that are placeholders versus true molecule entries.
 classified <- atc %>%
   mutate(
     name_trim = str_squish(str_to_lower(atc_name)),
     name_tokens = str_split(str_replace_all(name_trim, "[^a-z]+", " "), "\\s+"),
-    is_excluded = map_lgl(name_tokens, function(tokens) {
+    is_excluded = furrr::future_map_lgl(name_tokens, function(tokens) {
       tokens <- tokens[tokens != ""]
       length(tokens) > 0 && all(tokens %in% placeholder_tokens)
     })
   )
+try(future::plan(future::sequential), silent = TRUE)
 
 # Filter for molecules, removing temporary columns and keeping all original ones
 molecules <- classified %>%
