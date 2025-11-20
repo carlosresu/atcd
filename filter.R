@@ -6,7 +6,7 @@
 # This version keeps ALL original columns in the output files.
 # --------------------------------------------------------
 
-pacman::p_load(readr, dplyr, stringr, purrr, future, furrr)
+pacman::p_load(readr, dplyr, stringr, purrr, future, furrr, arrow)
 
 #' Return the directory where the script lives.
 #'
@@ -76,8 +76,18 @@ copy_outputs_to_superproject <- function(src_file) {
   super_output_dir <- file.path(repo_root, "dependencies", "atcd", "output")
   safe_copy(src_file, file.path(super_output_dir, basename(src_file)))
 
-  inputs_dir <- file.path(repo_root, "inputs")
-  safe_copy(src_file, file.path(inputs_dir, basename(src_file)))
+  if (grepl("_molecules\\.(csv|parquet)$", basename(src_file), perl = TRUE)) {
+    inputs_dir <- file.path(repo_root, "inputs", "drugs")
+    base_no_suffix <- sub("_molecules", "", basename(src_file))
+    safe_copy(src_file, file.path(inputs_dir, base_no_suffix))
+  }
+}
+
+write_csv_and_parquet <- function(df, csv_path) {
+  readr::write_csv(df, csv_path)
+  parquet_path <- sub("\\.csv$", ".parquet", csv_path)
+  arrow::write_parquet(df, parquet_path)
+  c(csv = csv_path, parquet = parquet_path)
 }
 
 .resolve_worker_count <- function() {
@@ -176,10 +186,8 @@ excluded <- classified %>%
   arrange(atc_code)
 
 # Write outputs
-readr::write_csv(molecules, out_file_molecules_canonical)
-readr::write_csv(excluded, out_file_excluded_canonical)
-copy_outputs_to_superproject(out_file_molecules_canonical)
-copy_outputs_to_superproject(out_file_excluded_canonical)
+invisible(lapply(write_csv_and_parquet(molecules, out_file_molecules_canonical), copy_outputs_to_superproject))
+invisible(lapply(write_csv_and_parquet(excluded, out_file_excluded_canonical), copy_outputs_to_superproject))
 
 # cat("Filtering complete.\n",
 #     "Input rows:", nrow(atc), "\n",

@@ -18,6 +18,7 @@ pacman::p_load(furrr)
 pacman::p_load(memoise)
 pacman::p_load(httr2)
 pacman::p_load(tibble)
+pacman::p_load(arrow)
 
 # --- MODIFICATION START ---
 # The following section makes the script's file paths robust and independent of the
@@ -340,6 +341,8 @@ if (file.exists(out_file_name)) {
   # message('Warning: file already exists. Will be overwritten.')
 }
 readr::write_csv(who_atc, out_file_name)
+parquet_path <- sub("\\.csv$", ".parquet", out_file_name)
+arrow::write_parquet(who_atc, parquet_path)
 
 # Finish execution ------------------------------------------------------------------------------------------------
 # message('Script execution completed.')

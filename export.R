@@ -5,7 +5,7 @@
 # and export them as ./output/who_atc_<YYYY-MM-DD>.csv
 # ---------------------------------------------
 
-pacman::p_load(readr, dplyr)
+pacman::p_load(readr, dplyr, arrow)
 
 #' Return the directory where the script resides, regardless of invocation context.
 #'
@@ -75,8 +75,18 @@ copy_outputs_to_superproject <- function(src_file) {
   super_output_dir <- file.path(repo_root, "dependencies", "atcd", "output")
   safe_copy(src_file, file.path(super_output_dir, basename(src_file)))
 
-  inputs_dir <- file.path(repo_root, "inputs")
-  safe_copy(src_file, file.path(inputs_dir, basename(src_file)))
+  if (grepl("_molecules\\.(csv|parquet)$", basename(src_file), perl = TRUE)) {
+    inputs_dir <- file.path(repo_root, "inputs", "drugs")
+    base_no_suffix <- sub("_molecules", "", basename(src_file))
+    safe_copy(src_file, file.path(inputs_dir, base_no_suffix))
+  }
+}
+
+write_csv_and_parquet <- function(df, csv_path) {
+  readr::write_csv(df, csv_path)
+  parquet_path <- sub("\\.csv$", ".parquet", csv_path)
+  arrow::write_parquet(df, parquet_path)
+  c(csv = csv_path, parquet = parquet_path)
 }
 
 # List candidate files
@@ -120,8 +130,7 @@ atc_level5 <- atc %>%
 
 out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
 # Matches dependencies/atcd/README.md note that Python loaders expect this filename pattern.
-readr::write_csv(atc_level5, out_file_canonical)
-copy_outputs_to_superproject(out_file_canonical)
+invisible(lapply(write_csv_and_parquet(atc_level5, out_file_canonical), copy_outputs_to_superproject))
 
 # cat("Export complete:", basename(out_file_canonical), "\n",
 #     "Rows written:", nrow(atc_level5), "\n", sep = " ")
