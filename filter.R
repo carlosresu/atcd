@@ -6,7 +6,7 @@
 # This version keeps ALL original columns in the output files and also emits CSVs for debugging.
 # --------------------------------------------------------
 
-pacman::p_load(polars, stringr)
+pacman::p_load(polars)
 
 #' Return the directory where the script lives.
 #'

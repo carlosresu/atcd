@@ -4,7 +4,7 @@
 
 **Codename:** `atcd`
 
-This mini-toolset scrapes the WHO ATC website (https://www.whocc.no/atc_ddd_index/) and produces clean CSVs you can use in downstream pipelines. It:
+This mini-toolset scrapes the WHO ATC website (https://www.whocc.no/atc_ddd_index/) and produces clean Parquet snapshots (with CSV mirrors for debugging) you can use in downstream pipelines. It:
 
 - Crawls the ATC hierarchy **recursively** from each top-level root (A, B, C, …, V)
 - Extracts **all levels (1–5)**, including Level‑5 DDD/UoM/Adm.R when present
@@ -19,24 +19,24 @@ The scraper is **parallelized**, **memoized**, and uses a **hardened HTTP layer*
 
 ```r
 # From the repository root (or this subfolder)
-# 1) Scrape the WHO ATC site (writes a dated raw CSV to ./output)
+# 1) Scrape the WHO ATC site (writes dated Parquet+CSV to ./output)
 source("atcd.R")
 
-# 2) Export Level‑5 only (writes ./output/who_atc_<YYYY-MM-DD>.csv)
+# 2) Export Level‑5 only (writes ./output/who_atc_<YYYY-MM-DD>.parquet + CSV)
 source("export.R")
 
 # 3) (Optional) Split molecules vs excluded placeholders (writes canonical filenames)
 source("filter.R")
 ```
 
-Outputs are written under `./output/`:
+Outputs are written under `./output/` (Parquet primary, CSV debug sidecar with the same stem):
 
-- `WHO ATC-DDD <YYYY-MM-DD>.csv` – full crawl all levels (raw snapshot)
-- `who_atc_<YYYY-MM-DD>.csv` – **Level‑5 only**, retains all original columns (DDD, UoM, Adm.R, Note)
-- `who_atc_<YYYY-MM-DD>_molecules.csv` – Level‑5 molecules kept (same columns as input)
-- `who_atc_<YYYY-MM-DD>_excluded.csv` – Level‑5 placeholders removed
+- `WHO ATC-DDD <YYYY-MM-DD>.parquet` – full crawl all levels (raw snapshot)
+- `who_atc_<YYYY-MM-DD>.parquet` – **Level‑5 only**, retains all original columns (DDD, UoM, Adm.R, Note)
+- `who_atc_<YYYY-MM-DD>_molecules.parquet` – Level‑5 molecules kept (same columns as input)
+- `who_atc_<YYYY-MM-DD>_excluded.parquet` – Level‑5 placeholders removed
 
-> The downstream Python pipeline expects the canonical `who_atc_<date>_molecules.csv` filename when loading WHO references.
+> The downstream Python pipeline expects the canonical `who_atc_<date>_molecules.*` filename when loading WHO references.
 
 > Dates are inferred from the run day; re-run to refresh.
 
@@ -54,12 +54,12 @@ flowchart TD
     C -- no (Level 5) --> E[Parse table\nATC/Name/DDD/UoM/Adm.R/Note]
     D --> B
     E --> F[Write per-root RDS]
-    F --> G[Bind all RDS → one tibble]
-    G --> H[Write raw CSV: WHO ATC-DDD <date>.csv]
+    F --> G[Bind all RDS → one data frame]
+    G --> H[Write raw Parquet+CSV: WHO ATC-DDD <date>.parquet]
     H --> I[export.R]
-    I --> J[who_atc_<date>.csv (Level‑5 only)]
-    J --> K[filter_molecules.R]
-    K --> L[molecules.csv / excluded.csv]
+    I --> J[who_atc_<date>.parquet (Level‑5 only)]
+    J --> K[filter.R]
+    K --> L[molecules.parquet / excluded.parquet]
 ```
 
 ---
@@ -80,29 +80,29 @@ flowchart TD
   - Fills blank `atc_code/atc_name` on multi‑row DDD entries
 - **Caching** with `wrapRDS()/getRDS()`
   - Each root (e.g., `who_atc_A`) is cached under `./output/rds/`
-  - Final combined tibble is written as `WHO ATC-DDD <YYYY-MM-DD>.csv` in `./output/`
+  - Final combined data frame is written via **r-polars** as `WHO ATC-DDD <YYYY-MM-DD>.parquet` (+ CSV) in `./output/`
 
-**Packages used**: `rvest`, `xml2`, `httr2`, `memoise`, `dplyr`, `readr`, `tibble`, `purrr`, `future`, `furrr`.
+**Packages used**: `rvest`, `xml2`, `httr2`, `memoise`, `future`, `furrr`, `polars`.
 
 ### [export.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/export.R)
 
-- Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.csv` by filename date
+- Scans `./output/` for the latest `WHO ATC-DDD <YYYY-MM-DD>.parquet` by filename date
 - Keeps **Level‑5** only (7‑char ATC codes), preserving **all columns** (DDD/UoM/Adm.R/Note)
-- Writes the canonical `./output/who_atc_<YYYY-MM-DD>.csv`
+- Writes the canonical `./output/who_atc_<YYYY-MM-DD>.parquet` (+ CSV sidecar)
 
 ### [filter.R](https://github.com/carlosresu/esoa/blob/main/dependencies/atcd/filter.R)
 
-- Takes the latest canonical `who_atc_<YYYY-MM-DD>.csv`
+- Takes the latest canonical `who_atc_<YYYY-MM-DD>.parquet`
 - Detects **pure placeholders** where every lowercase token is in the set `{various, miscellaneous, unspecified, general, other, others, combination(s), agents, products}`
 - Retains all original columns and writes:
-  - `who_atc_<date>_molecules.csv` – molecules retained (placeholder tokens allowed when mixed with real words)
-  - `who_atc_<date>_excluded.csv` – pure placeholders only
+  - `who_atc_<date>_molecules.parquet` – molecules retained (placeholder tokens allowed when mixed with real words)
+  - `who_atc_<date>_excluded.parquet` – pure placeholders only
 
 ---
 
 ## File schema
 
-### Raw snapshot (`WHO ATC-DDD <YYYY-MM-DD>.csv`)
+### Raw snapshot (`WHO ATC-DDD <YYYY-MM-DD>.parquet`)
 
 Columns may include:
 
@@ -113,7 +113,7 @@ Columns may include:
 - `adm_r` (chr, optional) – route of administration (Level‑5 only)
 - `note` (chr, optional) – additional notes
 
-### Level‑5 export (`who_atc_<date>.csv`)
+### Level‑5 export (`who_atc_<date>.parquet`)
 
 - All columns from the raw snapshot restricted to 7‑character codes and sorted alphabetically by `atc_code`
 
@@ -124,7 +124,7 @@ Columns may include:
 R ≥ 4.1 and the following packages:
 
 ```r
-pacman::p_load(rvest, dplyr, readr, xml2, purrr, future, furrr, memoise, httr2, tibble, stringr)
+pacman::p_load(rvest, xml2, future, furrr, memoise, httr2, polars)
 ```
 
 If `pacman` isn’t installed:

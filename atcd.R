@@ -9,14 +9,11 @@
 ##
 # Globals ---------------------------------------------------------------------------------------------------------
 pacman::p_load(rvest)
-pacman::p_load(dplyr)
 pacman::p_load(xml2)
-pacman::p_load(purrr)
 pacman::p_load(future)
 pacman::p_load(furrr)
 pacman::p_load(memoise)
 pacman::p_load(httr2)
-pacman::p_load(tibble)
 pacman::p_load(polars)
 
 # --- MODIFICATION START ---
@@ -94,6 +91,53 @@ rds_dir <- ensure_directory(out_dir, "rds")
 }
 
 options(expressions = 100000) # Allow deep recursion.
+
+# Standardized column order for ATC data frames.
+atc_columns <- c("atc_code", "atc_name", "ddd", "uom", "adm_r", "note")
+
+# Ensure consistent columns and rownames for downstream binding.
+normalize_atc_df <- function(df) {
+  if (is.null(df)) {
+    return(NULL)
+  }
+  if (inherits(df, "polars_object")) {
+    df <- as.data.frame(df)
+  }
+  if (!is.data.frame(df)) {
+    stop("normalize_atc_df() expects a data.frame or polars data frame.")
+  }
+  if (nrow(df) == 0) {
+    return(NULL)
+  }
+  missing_cols <- setdiff(atc_columns, names(df))
+  for (col in missing_cols) {
+    df[[col]] <- NA
+  }
+  df <- df[atc_columns]
+  df$atc_code <- as.character(df$atc_code)
+  df$atc_name <- as.character(df$atc_name)
+  df$ddd <- suppressWarnings(as.numeric(df$ddd))
+  df$uom <- as.character(df$uom)
+  df$adm_r <- as.character(df$adm_r)
+  df$note <- as.character(df$note)
+  rownames(df) <- NULL
+  df
+}
+
+# Convert a list of ATC frames into a single polars data frame.
+bind_rows_pl <- function(xs) {
+  xs <- Filter(Negate(is.null), xs)
+  if (length(xs) == 0) {
+    return(NULL)
+  }
+  xs <- lapply(xs, normalize_atc_df)
+  xs <- Filter(Negate(is.null), xs)
+  if (length(xs) == 0) {
+    return(NULL)
+  }
+  pl_list <- lapply(xs, polars::as_polars_df)
+  do.call(polars::pl$concat, pl_list)
+}
 
 wrapRDS <- function(var, exprs, by_name = FALSE, pass_val = FALSE, assign_val = TRUE) {
   #' This is a handy function to store variables between runs of the code and skip recreating them.
@@ -221,9 +265,9 @@ atc_roots <- c("A", "B", "C", "D", "G", "H", "J", "L", "M", "N", "P", "R", "S", 
 #' Scrape WHO ATC data for a root code and all descendants.
 #'
 #' @param root_atc_code One- to five-character ATC code indicating the subtree to scrape.
-#' @return Tibble containing ATC codes, names, DDDs, and related metadata.
+#' @return Data frame containing ATC codes, names, DDDs, and related metadata.
 scrape_who_atc <- function(root_atc_code) {
-  # This function scrapes and returns a tibble with all data available from https://www.whocc.no/atc_ddd_index/ for the
+  # This function scrapes and returns a data frame with all data available from https://www.whocc.no/atc_ddd_index/ for the
   # given ATC code and all its subcodes.
   if (length(root_atc_code) != 1) {
     stop("scrape_who_atc() only accepts single objects, not vectors. Please provide a single valid ATC code as input.")
@@ -240,22 +284,29 @@ scrape_who_atc <- function(root_atc_code) {
     scraped_strings <- html_data |>
       rvest::html_node(css = "#content > p:nth-of-type(2n)") |>
       rvest::html_text() |>
-      strsplit("\n") |>
-      dplyr::nth(1) |>
-      Filter(f = nchar)
+      strsplit("\n")
+    scraped_strings <- scraped_strings[[1]]
+    scraped_strings <- Filter(f = nchar, scraped_strings)
 
     if (length(scraped_strings) == 0) {
       return(NULL)
     }
 
-    tval <- lapply(scraped_strings, function(scraped_string) {
+    tval <- bind_rows_pl(lapply(scraped_strings, function(scraped_string) {
       atc_codes <- sub("^([A-Z]\\S*) (.*)", "\\1", scraped_string)
       atc_names <- sub("^([A-Z]\\S*) (.*)", "\\2", scraped_string)
-      t1 <- tibble::tibble(atc_code = atc_codes, atc_name = atc_names)
-      t2 <- lapply(atc_codes, scrape_who_atc) |> dplyr::bind_rows()
-      dplyr::bind_rows(t1, t2)
-    }) |>
-      dplyr::bind_rows()
+      t1 <- data.frame(
+        atc_code = atc_codes,
+        atc_name = atc_names,
+        ddd = NA_real_,
+        uom = NA_character_,
+        adm_r = NA_character_,
+        note = NA_character_,
+        stringsAsFactors = FALSE
+      )
+      t2 <- bind_rows_pl(lapply(atc_codes, scrape_who_atc))
+      bind_rows_pl(list(t1, t2))
+    }))
 
     # Add the root node if needed.
     if (atc_code_length == 1) {
@@ -264,7 +315,17 @@ scrape_who_atc <- function(root_atc_code) {
       root_atc_code_name <- root_atc_code_name[3]
       root_atc_code_name <- rvest::html_text(root_atc_code_name)
 
-      return(dplyr::bind_rows(tibble::tibble(atc_code = root_atc_code, atc_name = root_atc_code_name), tval))
+      root_row <- data.frame(
+        atc_code = root_atc_code,
+        atc_name = root_atc_code_name,
+        ddd = NA_real_,
+        uom = NA_character_,
+        adm_r = NA_character_,
+        note = NA_character_,
+        stringsAsFactors = FALSE
+      )
+
+      return(bind_rows_pl(list(root_row, tval)))
     } else {
       return(tval)
     }
@@ -274,10 +335,22 @@ scrape_who_atc <- function(root_atc_code) {
         return(NULL)
       }
 
-      retval <- sdt |>
-        rvest::html_table(header = TRUE) |>
-        dplyr::rename(atc_code = `ATC code`, atc_name = Name, ddd = DDD, uom = U, adm_r = `Adm.R`, note = Note) |>
-        dplyr::mutate(dplyr::across(dplyr::everything(), ~ ifelse(. == "", NA, .)))
+      raw_tbl <- sdt |>
+        rvest::html_table(header = TRUE)
+
+      if (is.null(raw_tbl) || length(raw_tbl) == 0) {
+        return(NULL)
+      }
+
+      retval <- as.data.frame(raw_tbl, stringsAsFactors = FALSE)
+      names(retval) <- c("atc_code", "atc_name", "ddd", "uom", "adm_r", "note")
+
+      retval[] <- lapply(retval, function(col) {
+        if (is.character(col)) {
+          col[col == ""] <- NA_character_
+        }
+        col
+      })
 
       # The table on the website does not repeat atc_code and atc_name in subsequent rows when that ATC code has more
       # than one ddd/uom/adm_r. Let's fill-in the blanks when that is the case.
@@ -291,7 +364,7 @@ scrape_who_atc <- function(root_atc_code) {
         }
       }
 
-      return(retval)
+      return(normalize_atc_df(retval))
     }
 
     retval <- rvest::html_node(html_data, xpath = "//ul/table") |>
@@ -319,7 +392,7 @@ on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
     ),
     .progress = TRUE,
     .options = furrr::furrr_options(
-      packages = c("xml2", "rvest", "dplyr", "httr2", "tibble", "memoise")
+      packages = c("xml2", "rvest", "httr2", "memoise")
     )
   )
 
@@ -330,12 +403,13 @@ try(future::plan(future::sequential), silent = TRUE)
 # Read the files produced by scrape_who_atc().
 who_atc <- paste0("who_atc_", atc_roots) |>
   lapply(getRDS, by_name = TRUE, assign_val = FALSE, pass_val = TRUE) |>
-  dplyr::bind_rows()
+  bind_rows_pl()
 
 # Write Parquet as the primary output and CSV as a debugging aid.
 out_parquet_name <- file.path(out_dir, paste0("WHO ATC-DDD ", format(Sys.Date(), "%Y-%m-%d"), ".parquet"))
 out_csv_name <- sub("\\.parquet$", ".csv", out_parquet_name)
-who_atc_pl <- polars::pl$DataFrame(who_atc)
+# Ensure we have a proper Polars DataFrame for output.
+who_atc_pl <- if (inherits(who_atc, "polars_object")) who_atc else polars::as_polars_df(who_atc)
 if (file.exists(out_parquet_name)) {
   # message('Warning: file already exists. Will be overwritten.')
 }
