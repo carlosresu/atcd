@@ -1,12 +1,12 @@
 # filter.R
 # --------------------------------------------------------
-# Splits the latest who_atc_YYYY-MM-DD.csv into:
-#   molecules.csv (real substances, even if "... combinations")
-#   excluded.csv  (generic placeholders only)
-# This version keeps ALL original columns in the output files.
+# Splits the latest who_atc_YYYY-MM-DD.parquet into:
+#   molecules.parquet (real substances, even if "... combinations")
+#   excluded.parquet  (generic placeholders only)
+# This version keeps ALL original columns in the output files and also emits CSVs for debugging.
 # --------------------------------------------------------
 
-pacman::p_load(readr, dplyr, stringr, purrr, future, furrr, arrow)
+pacman::p_load(polars, stringr)
 
 #' Return the directory where the script lives.
 #'
@@ -83,58 +83,25 @@ copy_outputs_to_superproject <- function(src_file) {
   }
 }
 
-write_csv_and_parquet <- function(df, csv_path) {
-  readr::write_csv(df, csv_path)
-  parquet_path <- sub("\\.csv$", ".parquet", csv_path)
-  arrow::write_parquet(df, parquet_path)
+write_csv_and_parquet <- function(df, parquet_path) {
+  df$write_parquet(parquet_path)
+  csv_path <- sub("\\.parquet$", ".csv", parquet_path)
+  df$write_csv(csv_path)
   c(csv = csv_path, parquet = parquet_path)
 }
 
-.resolve_worker_count <- function() {
-  env_workers <- Sys.getenv("ESOA_ATCD_FILTER_WORKERS", unset = NA_character_)
-  if (!is.na(env_workers)) {
-    parsed <- suppressWarnings(as.integer(env_workers))
-    if (!is.na(parsed) && parsed > 0) {
-      return(parsed)
-    }
-  }
-  cores <- tryCatch(future::availableCores(), error = function(...) NA_integer_)
-  if (is.na(cores) || cores < 1) {
-    cores <- tryCatch(parallel::detectCores(), error = function(...) NA_integer_)
-  }
-  if (is.na(cores) || cores <= 1) {
-    return(1L)
-  }
-  max(1L, cores - 1L)
-}
-
-.configure_future_plan <- function(workers = NULL) {
-  if (is.null(workers) || !is.numeric(workers) || workers < 1) {
-    workers <- .resolve_worker_count()
-  }
-  workers <- max(1L, as.integer(workers))
-  if (.Platform$OS.type == "windows") {
-    future::plan(future::multisession, workers = workers)
-  } else if (future::supportsMulticore()) {
-    future::plan(future::multicore, workers = workers)
-  } else {
-    future::plan(future::multisession, workers = workers)
-  }
-  workers
-}
-
-# Find the latest canonical who_atc_<YYYY-MM-DD>.csv
+# Find the latest canonical who_atc_<YYYY-MM-DD>.parquet
 files <- list.files(
   path = output_dir,
-  pattern = "^who_atc_\\d{4}-\\d{2}-\\d{2}\\.csv$",
+  pattern = "^who_atc_\\d{4}-\\d{2}-\\d{2}\\.parquet$",
   full.names = TRUE
 )
 
 if (length(files) == 0) {
-  stop("No who_atc CSV exports found in ./output. Run export.R first.")
+  stop("No who_atc Parquet exports found in ./output. Run export.R first.")
 }
 
-date_pattern <- "^who_atc_(\\d{4}-\\d{2}-\\d{2})\\.csv$"
+date_pattern <- "^who_atc_(\\d{4}-\\d{2}-\\d{2})\\.parquet$"
 date_strs <- sub(date_pattern, "\\1", basename(files))
 dates <- as.Date(date_strs, "%Y-%m-%d")
 latest_idx <- which.max(dates)
@@ -142,13 +109,13 @@ latest_idx <- which.max(dates)
 in_file <- files[latest_idx]
 date_str <- date_strs[latest_idx]
 
-out_file_molecules_canonical <- file.path(output_dir, sprintf("who_atc_%s_molecules.csv", date_str))
-out_file_excluded_canonical <- file.path(output_dir, sprintf("who_atc_%s_excluded.csv", date_str))
+out_file_molecules_canonical <- file.path(output_dir, sprintf("who_atc_%s_molecules.parquet", date_str))
+out_file_excluded_canonical <- file.path(output_dir, sprintf("who_atc_%s_excluded.parquet", date_str))
 
 # cat("Using latest input file:", basename(in_file), "\n")
 
 # Read file
-atc <- readr::read_csv(in_file, show_col_types = FALSE)
+atc <- polars::pl$scan_parquet(in_file)
 
 # Terms that indicate pure placeholders
 placeholder_tokens <- c(
@@ -157,33 +124,32 @@ placeholder_tokens <- c(
   "agents", "products"
 )
 
-workers <- .configure_future_plan()
-on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
-
 # Classify rows, adding temporary columns for filtering
 ## Flag rows that are placeholders versus true molecule entries.
-classified <- atc %>%
-  mutate(
-    name_trim = str_squish(str_to_lower(atc_name)),
-    name_tokens = str_split(str_replace_all(name_trim, "[^a-z]+", " "), "\\s+"),
-    is_excluded = furrr::future_map_lgl(name_tokens, function(tokens) {
-      tokens <- tokens[tokens != ""]
-      length(tokens) > 0 && all(tokens %in% placeholder_tokens)
-    })
-  )
-try(future::plan(future::sequential), silent = TRUE)
+classified <- atc |>
+    polars::pl$with_columns(
+      name_trim = polars::pl$col("atc_name")$str$to_lowercase()$str$replace_all("[^a-z]+", " ")$str$strip(),
+      name_tokens = polars::pl$col("atc_name")$str$to_lowercase()$str$replace_all("[^a-z]+", " ")$str$strip()$str$split_regex("\\s+")
+    ) |>
+    polars::pl$with_columns(
+      is_excluded = polars::pl$when(polars::pl$col("name_tokens")$list$lengths() > 0)$then(
+        polars::pl$col("name_tokens")$list$all(polars::pl$element()$is_in(placeholder_tokens))
+      )$otherwise(FALSE)
+    )
 
 # Filter for molecules, removing temporary columns and keeping all original ones
-molecules <- classified %>%
-  filter(!is_excluded) %>%
-  select(-name_trim, -name_tokens, -is_excluded) %>%
-  arrange(atc_code)
+molecules <- classified |>
+  polars::pl$filter(polars::pl$col("is_excluded")$not()) |>
+  polars::pl$drop("name_trim", "name_tokens", "is_excluded") |>
+  polars::pl$arrange("atc_code") |>
+  polars::pl$collect()
 
 # Filter for excluded placeholders, removing temporary columns and keeping all original ones
-excluded <- classified %>%
-  filter(is_excluded) %>%
-  select(-name_trim, -name_tokens, -is_excluded) %>%
-  arrange(atc_code)
+excluded <- classified |>
+  polars::pl$filter(polars::pl$col("is_excluded")) |>
+  polars::pl$drop("name_trim", "name_tokens", "is_excluded") |>
+  polars::pl$arrange("atc_code") |>
+  polars::pl$collect()
 
 # Write outputs
 invisible(lapply(write_csv_and_parquet(molecules, out_file_molecules_canonical), copy_outputs_to_superproject))

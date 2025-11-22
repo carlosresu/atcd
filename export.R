@@ -1,11 +1,11 @@
 # export.R
 # ---------------------------------------------
-# Find the latest "WHO ATC-DDD YYYY-MM-DD.csv" inside ./output,
+# Find the latest "WHO ATC-DDD YYYY-MM-DD.parquet" inside ./output,
 # keep ONLY Level 5 ATC codes (7-char codes) with ALL original columns,
-# and export them as ./output/who_atc_<YYYY-MM-DD>.csv
+# and export them as ./output/who_atc_<YYYY-MM-DD>.parquet (plus CSV for debugging)
 # ---------------------------------------------
 
-pacman::p_load(readr, dplyr, arrow)
+pacman::p_load(polars)
 
 #' Return the directory where the script resides, regardless of invocation context.
 #'
@@ -82,27 +82,27 @@ copy_outputs_to_superproject <- function(src_file) {
   }
 }
 
-write_csv_and_parquet <- function(df, csv_path) {
-  readr::write_csv(df, csv_path)
-  parquet_path <- sub("\\.csv$", ".parquet", csv_path)
-  arrow::write_parquet(df, parquet_path)
+write_csv_and_parquet <- function(df, parquet_path) {
+  df$write_parquet(parquet_path)
+  csv_path <- sub("\\.parquet$", ".csv", parquet_path)
+  df$write_csv(csv_path)
   c(csv = csv_path, parquet = parquet_path)
 }
 
 # List candidate files
 files <- list.files(
   path = output_dir,
-  pattern = "^WHO ATC-DDD \\d{4}-\\d{2}-\\d{2}\\.csv$",
+  pattern = "^WHO ATC-DDD \\d{4}-\\d{2}-\\d{2}\\.parquet$",
   full.names = TRUE
 )
 
 if (length(files) == 0) {
-  stop("No 'WHO ATC-DDD YYYY-MM-DD.csv' files found in the 'output' folder.")
+  stop("No 'WHO ATC-DDD YYYY-MM-DD.parquet' files found in the 'output' folder.")
 }
 
 # Extract date string from each filename, then convert to Date
-# Example basename: "WHO ATC-DDD 2025-09-25.csv"
-date_strs <- sub("^WHO ATC-DDD (\\d{4}-\\d{2}-\\d{2})\\.csv$", "\\1", basename(files))
+# Example basename: "WHO ATC-DDD 2025-09-25.parquet"
+date_strs <- sub("^WHO ATC-DDD (\\d{4}-\\d{2}-\\d{2})\\.parquet$", "\\1", basename(files))
 dates <- as.Date(date_strs, format = "%Y-%m-%d")
 
 # Pick the newest by the date embedded in the filename
@@ -113,22 +113,23 @@ date_str <- date_strs[latest_idx]
 # cat("Using latest input file:", basename(in_file), "\n")
 
 # Read data
-atc <- readr::read_csv(in_file, show_col_types = FALSE)
+atc <- polars::pl$scan_parquet(in_file)
 
 # Validate required columns
 required_cols <- c("atc_code", "atc_name")
-missing <- setdiff(required_cols, names(atc))
+missing <- setdiff(required_cols, atc$columns)
 if (length(missing) > 0) {
   stop("Input file is missing required columns: ", paste(missing, collapse = ", "))
 }
 
 # Keep only Level 5 (7-char) ATC codes, retaining all original columns
 ## Filter to leaf-level ATC entries because earlier stages rely on molecules only.
-atc_level5 <- atc %>%
-  filter(nchar(atc_code) == 7) %>%
-  arrange(atc_code)
+atc_level5 <- atc |>
+  polars::pl$filter(polars::pl$col("atc_code")$str$n_chars() == 7) |>
+  polars::pl$arrange("atc_code") |>
+  polars::pl$collect()
 
-out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.csv", date_str))
+out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.parquet", date_str))
 # Matches dependencies/atcd/README.md note that Python loaders expect this filename pattern.
 invisible(lapply(write_csv_and_parquet(atc_level5, out_file_canonical), copy_outputs_to_superproject))
 

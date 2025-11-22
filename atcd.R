@@ -10,7 +10,6 @@
 # Globals ---------------------------------------------------------------------------------------------------------
 pacman::p_load(rvest)
 pacman::p_load(dplyr)
-pacman::p_load(readr)
 pacman::p_load(xml2)
 pacman::p_load(purrr)
 pacman::p_load(future)
@@ -18,7 +17,7 @@ pacman::p_load(furrr)
 pacman::p_load(memoise)
 pacman::p_load(httr2)
 pacman::p_load(tibble)
-pacman::p_load(arrow)
+pacman::p_load(polars)
 
 # --- MODIFICATION START ---
 # The following section makes the script's file paths robust and independent of the
@@ -309,20 +308,20 @@ on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
 # Create/refresh per-root RDS files in parallel.
 # Use future_walk since we only care about the side effect (writing RDS files)
 # and do not need to collect the results, which prevents printing them.
-furrr::future_walk(
-  atc_roots,
-  ~ wrapRDS(
-    var        = paste0("who_atc_", .x),
-    exprs      = scrape_who_atc(.x),
-    by_name    = TRUE,
-    assign_val = FALSE, # assignment inside worker not needed; we rely on RDS output
-    pass_val   = FALSE
-  ),
-  .progress = TRUE,
-  .options = furrr::furrr_options(
-    packages = c("xml2", "rvest", "dplyr", "readr", "httr2", "tibble", "memoise")
+  furrr::future_walk(
+    atc_roots,
+    ~ wrapRDS(
+      var        = paste0("who_atc_", .x),
+      exprs      = scrape_who_atc(.x),
+      by_name    = TRUE,
+      assign_val = FALSE, # assignment inside worker not needed; we rely on RDS output
+      pass_val   = FALSE
+    ),
+    .progress = TRUE,
+    .options = furrr::furrr_options(
+      packages = c("xml2", "rvest", "dplyr", "httr2", "tibble", "memoise")
+    )
   )
-)
 
 # Optional: return to sequential plan
 try(future::plan(future::sequential), silent = TRUE)
@@ -333,16 +332,15 @@ who_atc <- paste0("who_atc_", atc_roots) |>
   lapply(getRDS, by_name = TRUE, assign_val = FALSE, pass_val = TRUE) |>
   dplyr::bind_rows()
 
-# Write them to a CSV file. Generate file name from current date in year-month-day format.
-# MODIFIED: Use file.path for robust path construction.
-out_file_name <- file.path(out_dir, paste0("WHO ATC-DDD ", format(Sys.Date(), "%Y-%m-%d"), ".csv"))
-# message('Writing results to ', out_file_name, '.')
-if (file.exists(out_file_name)) {
+# Write Parquet as the primary output and CSV as a debugging aid.
+out_parquet_name <- file.path(out_dir, paste0("WHO ATC-DDD ", format(Sys.Date(), "%Y-%m-%d"), ".parquet"))
+out_csv_name <- sub("\\.parquet$", ".csv", out_parquet_name)
+who_atc_pl <- polars::pl$DataFrame(who_atc)
+if (file.exists(out_parquet_name)) {
   # message('Warning: file already exists. Will be overwritten.')
 }
-readr::write_csv(who_atc, out_file_name)
-parquet_path <- sub("\\.csv$", ".parquet", out_file_name)
-arrow::write_parquet(who_atc, parquet_path)
+who_atc_pl$write_parquet(out_parquet_name)
+who_atc_pl$write_csv(out_csv_name)
 
 # Finish execution ------------------------------------------------------------------------------------------------
 # message('Script execution completed.')
