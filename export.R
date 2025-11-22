@@ -122,12 +122,9 @@ if (length(missing) > 0) {
   stop("Input file is missing required columns: ", paste(missing, collapse = ", "))
 }
 
-# Keep only Level 5 (7-char) ATC codes, retaining all original columns
-## Filter to leaf-level ATC entries because earlier stages rely on molecules only.
-atc_level5 <- atc |>
-  polars::pl$filter(polars::pl$col("atc_code")$str$n_chars() == 7) |>
-  polars::pl$arrange("atc_code") |>
-  polars::pl$collect()
+# Keep only Level 5 (7-char) ATC codes, retaining all original columns.
+# Filter to leaf-level ATC entries because earlier stages rely on molecules only.
+atc_level5 <- atc$filter(polars::pl$col("atc_code")$str$len_bytes() == 7)$sort("atc_code")$collect()
 
 out_file_canonical <- file.path(output_dir, sprintf("who_atc_%s.parquet", date_str))
 # Matches dependencies/atcd/README.md note that Python loaders expect this filename pattern.

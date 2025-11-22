@@ -114,8 +114,9 @@ out_file_excluded_canonical <- file.path(output_dir, sprintf("who_atc_%s_exclude
 
 # cat("Using latest input file:", basename(in_file), "\n")
 
-# Read file
-atc <- polars::pl$scan_parquet(in_file)
+# Read file (lazy, then collect to R for string ops not yet available in r-polars)
+atc <- polars::pl$scan_parquet(in_file)$collect()
+atc_df <- as.data.frame(atc)
 
 # Terms that indicate pure placeholders
 placeholder_tokens <- c(
@@ -124,32 +125,26 @@ placeholder_tokens <- c(
   "agents", "products"
 )
 
-# Classify rows, adding temporary columns for filtering
-## Flag rows that are placeholders versus true molecule entries.
-classified <- atc |>
-    polars::pl$with_columns(
-      name_trim = polars::pl$col("atc_name")$str$to_lowercase()$str$replace_all("[^a-z]+", " ")$str$strip(),
-      name_tokens = polars::pl$col("atc_name")$str$to_lowercase()$str$replace_all("[^a-z]+", " ")$str$strip()$str$split_regex("\\s+")
-    ) |>
-    polars::pl$with_columns(
-      is_excluded = polars::pl$when(polars::pl$col("name_tokens")$list$lengths() > 0)$then(
-        polars::pl$col("name_tokens")$list$all(polars::pl$element()$is_in(placeholder_tokens))
-      )$otherwise(FALSE)
-    )
+# Normalize names and classify
+normalize_tokens <- function(x) {
+  x <- tolower(gsub("[^a-z]+", " ", x))
+  x <- gsub(" +", " ", x)
+  x <- gsub("^ +| +$", "", x)
+  strsplit(x, " ", fixed = TRUE)
+}
 
-# Filter for molecules, removing temporary columns and keeping all original ones
-molecules <- classified |>
-  polars::pl$filter(polars::pl$col("is_excluded")$not()) |>
-  polars::pl$drop("name_trim", "name_tokens", "is_excluded") |>
-  polars::pl$arrange("atc_code") |>
-  polars::pl$collect()
+tokens_list <- normalize_tokens(atc_df$atc_name)
+is_excluded <- vapply(tokens_list, function(tokens) {
+  if (length(tokens) == 0) return(FALSE)
+  all(tokens %in% placeholder_tokens)
+}, logical(1))
 
-# Filter for excluded placeholders, removing temporary columns and keeping all original ones
-excluded <- classified |>
-  polars::pl$filter(polars::pl$col("is_excluded")) |>
-  polars::pl$drop("name_trim", "name_tokens", "is_excluded") |>
-  polars::pl$arrange("atc_code") |>
-  polars::pl$collect()
+molecules_df <- atc_df[!is_excluded, , drop = FALSE]
+excluded_df <- atc_df[is_excluded, , drop = FALSE]
+
+# Back to polars for output and sorting
+molecules <- polars::as_polars_df(molecules_df)$sort("atc_code")
+excluded <- polars::as_polars_df(excluded_df)$sort("atc_code")
 
 # Write outputs
 invisible(lapply(write_csv_and_parquet(molecules, out_file_molecules_canonical), copy_outputs_to_superproject))
