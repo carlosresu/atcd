@@ -116,7 +116,9 @@ write_csv_and_parquet <- function(df, csv_path) {
     workers <- .resolve_worker_count()
   }
   workers <- max(1L, as.integer(workers))
-  if (.Platform$OS.type == "windows") {
+  is_darwin <- identical(tolower(Sys.info()[["sysname"]]), "darwin")
+  if (.Platform$OS.type == "windows" || is_darwin) {
+    # macOS forks can crash due to Objective-C init during fork; prefer multisession.
     future::plan(future::multisession, workers = workers)
   } else if (future::supportsMulticore()) {
     future::plan(future::multicore, workers = workers)

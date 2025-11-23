@@ -87,7 +87,9 @@ rds_dir <- ensure_directory(out_dir, "rds")
     workers <- .resolve_worker_count()
   }
   workers <- max(1L, as.integer(workers))
-  if (.Platform$OS.type == "windows") {
+  is_darwin <- identical(tolower(Sys.info()[["sysname"]]), "darwin")
+  if (.Platform$OS.type == "windows" || is_darwin) {
+    # macOS forked workers crash with Objective-C initializers; stick to multisession there.
     future::plan(future::multisession, workers = workers)
   } else if (future::supportsMulticore()) {
     future::plan(future::multicore, workers = workers)
