@@ -6,6 +6,9 @@
 # This version keeps ALL original columns in the output files.
 # --------------------------------------------------------
 
+if (!requireNamespace("pacman", quietly = TRUE)) {
+  install.packages("pacman", repos = "https://cloud.r-project.org")
+}
 pacman::p_load(readr, dplyr, stringr, purrr, future, furrr, arrow)
 
 #' Return the directory where the script lives.

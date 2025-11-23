@@ -5,6 +5,9 @@
 # and export them as ./output/who_atc_<YYYY-MM-DD>.csv
 # ---------------------------------------------
 
+if (!requireNamespace("pacman", quietly = TRUE)) {
+  install.packages("pacman", repos = "https://cloud.r-project.org")
+}
 pacman::p_load(readr, dplyr, arrow)
 
 #' Return the directory where the script resides, regardless of invocation context.

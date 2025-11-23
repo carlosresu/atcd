@@ -8,6 +8,9 @@
 #'
 ##
 # Globals ---------------------------------------------------------------------------------------------------------
+if (!requireNamespace("pacman", quietly = TRUE)) {
+  install.packages("pacman", repos = "https://cloud.r-project.org")
+}
 pacman::p_load(rvest)
 pacman::p_load(dplyr)
 pacman::p_load(readr)
