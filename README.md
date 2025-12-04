@@ -1,8 +1,8 @@
-# atcd
+# WHO ATC scraper (PIDS DRG)
 
 ### Scrape Anatomical–Therapeutic–Chemical (ATC) classes from the WHO Collaborating Centre for Drug Statistics Methodology
 
-**Codename:** `atcd`
+**Codename:** `atcd` (used in the PIDS DRG pipelines to supply WHO ATC reference snapshots)
 
 This mini-toolset scrapes the WHO ATC website (https://www.whocc.no/atc_ddd_index/) and produces clean CSVs you can use in downstream pipelines. It:
 
