@@ -1,8 +1,31 @@
-# WHO ATC scraper (PIDS DRG)
+# pids-drg-who-atc
 
 ### Scrape Anatomical–Therapeutic–Chemical (ATC) classes from the WHO Collaborating Centre for Drug Statistics Methodology
 
 **Codename:** `atcd` (used in the PIDS DRG pipelines to supply WHO ATC reference snapshots)
+
+**Last Updated:** December 2025
+
+---
+
+## Progress Since June 2025
+
+| Date | Milestone |
+|------|-----------|
+| **Jun-Jul 2025** | Initial R scraper with recursive ATC crawling |
+| **Aug 2025** | Added parallelization via `future` + `furrr` |
+| **Sep 2025** | Added hardened HTTP layer with retries (1s, 2s, 4s backoff) |
+| **Oct 2025** | Added Level-5 export and molecule filtering |
+| **Nov 2025** | Added in-process memoization via `memoise` |
+| **Dec 2025** | Produces date-stamped canonical CSVs (`who_atc_YYYY-MM-DD.csv`) |
+
+### Current Outputs
+
+- **Full Snapshot:** `WHO ATC-DDD YYYY-MM-DD.csv` (all levels 1-5)
+- **Level-5 Only:** `who_atc_YYYY-MM-DD.csv` (molecules with DDD/UoM/Adm.R)
+- **Filtered:** `who_atc_YYYY-MM-DD_molecules.csv` (excludes placeholders)
+
+---
 
 This mini-toolset scrapes the WHO ATC website (https://www.whocc.no/atc_ddd_index/) and produces clean CSVs you can use in downstream pipelines. It:
 
